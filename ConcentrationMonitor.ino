@@ -1,0 +1,403 @@
+/*
+ * ConcentrationMonitor.ino
+ *
+ * Sistema de monitoreo de "Horas de concentración" para ayudar a los
+ * usuarios a medir sus sesiones de estudio.
+ * 
+ * Características:
+ * - Interfaz web para ingresar nombre, materia y tiempo de concentración
+ * - Monitoreo de condiciones ambientales (luz, temperatura, movimiento, sonido)
+ * - Indicadores LED y alarmas para sesiones de concentración
+ * - Almacenamiento de datos en base de datos externa (vía comunicación serial)
+ */
+
+#include <Arduino.h>
+#include <WiFi.h>
+#include <AsyncTCP.h>
+#include "ESPAsyncWebServer.h"
+#include <LittleFS.h>
+#include "time.h"
+//#include <DHT.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+#include <NoDelay.h>
+#include <ArduinoJson.h>
+
+// Configuración de WiFi
+const char* ssid = "TU_SSID";
+const char* password = "TU_PASSWORD";
+
+// Configuración de pines
+#define LED_VERDE 2
+#define LED_ROJO 4
+#define BUZZER 15
+#define SENSOR_MOVIMIENTO 12
+#define SENSOR_LUZ 34
+#define SENSOR_SONIDO 35
+//#define DHTPIN 14
+#define DS18B20_PIN 14
+//#define DHTTYPE DHT11
+
+// Configuración del servidor NTP
+const char* ntpServer = "pool.ntp.org";
+const long gmtOffset_sec = -21600; // -6 horas (ajustar según zona horaria)
+const int daylightOffset_sec = 0;
+
+// Variables de tiempo
+const long INTERVALO_LECTURA = 1000; // Intervalo de lectura de sensores (1 segundo)
+
+// Instancia del sensor DHT
+//DHT dht(DHTPIN, DHTTYPE);
+OneWire oneWire(DS18B20_PIN);
+DallasTemperature sensors(&oneWire);
+
+// Instancia del servidor web en puerto 80
+AsyncWebServer server(80);
+
+// Instancia para manejo de intervalos de tiempo
+noDelay lecturaInterval(INTERVALO_LECTURA);
+
+// Variables para almacenar datos
+struct tm timeinfo;
+String fechaHoraActual;
+String nombreUsuario = "";
+String nombreMateria = "";
+unsigned long tiempoDeseado = 0; // en milisegundos
+unsigned long tiempoInicio = 0;
+unsigned long tiempoRestante = 0;
+bool sesionActiva = false;
+int contadorMovimientos = 0;
+int contadorSonidos = 0;
+int totalDistracciones = 0;
+float promedioLuz = 0;
+float promedioTemperatura = 0;
+int promedioSonido = 0;
+int totalLecturas = 0;
+int sumaLuz = 0;
+int sumaSonido = 0;
+float sumaTemperatura = 0;
+
+// Variables para almacenar datos en tiempo real
+float temperaturaActual = 0;
+int luzActual = 0;
+int sonidoActual = 0;
+bool movimientoActual = false;
+
+// Función para conectar a WiFi
+void conectarWiFi() {
+  Serial.println("Conectando a WiFi...");
+  WiFi.begin(ssid, password);
+  
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.print(".");
+  }
+  
+  Serial.println("");
+  Serial.println("WiFi conectado!");
+  Serial.print("Dirección IP: ");
+  Serial.println(WiFi.localIP());
+}
+
+// Función para inicializar LittleFS
+void inicializarLittleFS() {
+  if (!LittleFS.begin(true)) {
+    Serial.println("Error al montar LittleFS");
+    return;
+  }
+  Serial.println("LittleFS montado correctamente");
+}
+
+// Función para configurar el servidor web
+void configurarServidor() {
+  // Rutas para archivos estáticos
+  server.serveStatic("/", LittleFS, "/");
+  
+  // Página de inicio - Configuración de sesión
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(LittleFS, "/index.html", "text/html", false, processor);
+  });
+  
+  // Página de monitoreo de tiempo
+  server.on("/monitor", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(LittleFS, "/monitor.html", "text/html", false, processor);
+  });
+  
+  // Página de resultados
+  server.on("/resultados", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(LittleFS, "/resultados.html", "text/html", false, processor);
+  });
+  
+  // Endpoint para iniciar sesión
+  server.on("/iniciar", HTTP_POST, [](AsyncWebServerRequest *request) {
+    if (request->hasParam("nombre", true) && 
+        request->hasParam("materia", true) && 
+        request->hasParam("tiempo", true)) {
+      
+      nombreUsuario = request->getParam("nombre", true)->value();
+      nombreMateria = request->getParam("materia", true)->value();
+      tiempoDeseado = request->getParam("tiempo", true)->value().toInt() * 60 * 1000; // Convertir minutos a milisegundos
+      
+      // Iniciar sesión
+      iniciarSesion();
+      
+      // Redireccionar a página de monitoreo
+      request->redirect("/monitor");
+    } else {
+      request->send(400, "text/plain", "Faltan parámetros");
+    }
+  });
+  
+  // Endpoint para detener sesión
+  server.on("/detener", HTTP_POST, [](AsyncWebServerRequest *request) {
+    if (sesionActiva) {
+      finalizarSesion();
+    }
+    request->redirect("/resultados");
+  });
+  
+  // Endpoint para obtener datos actuales en formato JSON
+  server.on("/datos", HTTP_GET, [](AsyncWebServerRequest *request) {
+    AsyncResponseStream *response = request->beginResponseStream("application/json");
+    DynamicJsonDocument doc(1024);
+    
+    doc["tiempoRestante"] = tiempoRestante / 1000; // Convertir a segundos
+    doc["sesionActiva"] = sesionActiva;
+    doc["temperatura"] = temperaturaActual;
+    doc["luz"] = luzActual;
+    doc["sonido"] = sonidoActual;
+    doc["movimiento"] = movimientoActual;
+    doc["contadorMovimientos"] = contadorMovimientos;
+    doc["contadorSonidos"] = contadorSonidos;
+    doc["totalDistracciones"] = totalDistracciones;
+    
+    serializeJson(doc, *response);
+    request->send(response);
+  });
+  
+  // Manejo de rutas no encontradas
+  server.onNotFound([](AsyncWebServerRequest *request) {
+    request->send(404, "text/plain", "Página no encontrada");
+  });
+}
+
+// Función para iniciar la sesión de concentración
+void iniciarSesion() {
+  // Establecer bandera de sesión activa
+  sesionActiva = true;
+  
+  // Encender LED verde, apagar LED rojo
+  digitalWrite(LED_VERDE, HIGH);
+  digitalWrite(LED_ROJO, LOW);
+  
+  // Reproducir sonido de inicio
+  tone(BUZZER, 1000, 500);
+  
+  // Resetear variables de conteo
+  contadorMovimientos = 0;
+  contadorSonidos = 0;
+  totalDistracciones = 0;
+  totalLecturas = 0;
+  sumaLuz = 0;
+  sumaSonido = 0;
+  sumaTemperatura = 0;
+  
+  // Marcar tiempo de inicio
+  tiempoInicio = millis();
+  
+  // Mostrar en consola
+  Serial.println("Sesión iniciada");
+  Serial.print("Usuario: ");
+  Serial.println(nombreUsuario);
+  Serial.print("Materia: ");
+  Serial.println(nombreMateria);
+  Serial.print("Tiempo deseado (minutos): ");
+  Serial.println(tiempoDeseado / 60000);
+}
+
+// Función para finalizar la sesión de concentración
+void finalizarSesion() {
+  // Establecer bandera de sesión inactiva
+  sesionActiva = false;
+  
+  // Apagar LED verde, encender LED rojo
+  digitalWrite(LED_VERDE, LOW);
+  digitalWrite(LED_ROJO, HIGH);
+  
+  // Reproducir sonido de finalización
+  tone(BUZZER, 2000, 1000);
+  
+  // Calcular promedios
+  if (totalLecturas > 0) {
+    promedioLuz = sumaLuz / (float)totalLecturas;
+    promedioTemperatura = sumaTemperatura / (float)totalLecturas;
+    promedioSonido = sumaSonido / (float)totalLecturas;
+  }
+  
+  // Calcular tiempo total de la sesión
+  unsigned long tiempoTotal = millis() - tiempoInicio;
+  
+  // Obtener fecha y hora actual
+  if (getLocalTime(&timeinfo)) {
+    char fechaHora[64];
+    strftime(fechaHora, sizeof(fechaHora), "%Y-%m-%d %H:%M:%S", &timeinfo);
+    fechaHoraActual = String(fechaHora);
+  }
+  
+  // Enviar datos a Python para almacenar en base de datos
+  DynamicJsonDocument doc(1024);
+  doc["nombre"] = nombreUsuario;
+  doc["materia"] = nombreMateria;
+  doc["duracionDeseada"] = tiempoDeseado;
+  doc["duracionFinal"] = tiempoTotal;
+  doc["distracciones"] = totalDistracciones;
+  doc["distracciones_movimiento"] = contadorMovimientos;
+  doc["distracciones_sonido"] = contadorSonidos;
+  doc["luz_promedio"] = promedioLuz;
+  doc["temperatura_promedio"] = promedioTemperatura;
+  doc["ruido_promedio"] = promedioSonido;
+  doc["fecha"] = fechaHoraActual;
+  
+  String jsonOutput;
+  serializeJson(doc, jsonOutput);
+  Serial.println("DB_DATA:" + jsonOutput);
+  
+  // Mostrar en consola
+  Serial.println("Sesión finalizada");
+  Serial.print("Duración total (segundos): ");
+  Serial.println(tiempoTotal / 1000);
+  Serial.print("Distracciones: ");
+  Serial.println(totalDistracciones);
+}
+
+// Función para leer sensores
+void leerSensores() {
+  // Leer temperatura
+  sensors.requestTemperatures();
+  //float tempC = dht.readTemperature();
+    float tempC = sensors.getTempCByIndex(0);
+
+  if (!isnan(tempC)) {
+    temperaturaActual = tempC;
+    sumaTemperatura += tempC;
+  }
+  
+  // Leer luz
+  luzActual = analogRead(SENSOR_LUZ);
+  sumaLuz += luzActual;
+  
+  // Leer sonido
+  sonidoActual = analogRead(SENSOR_SONIDO);
+  sumaSonido += sonidoActual;
+  
+  // Leer movimiento
+  movimientoActual = digitalRead(SENSOR_MOVIMIENTO) == HIGH;
+  
+  // Incrementar contadores si hay distracción
+  if (movimientoActual) {
+    contadorMovimientos++;
+    totalDistracciones++;
+    
+    // Si ha habido 10 movimientos, activar alarma
+    if (contadorMovimientos % 10 == 0) {
+      tone(BUZZER, 1500, 500);
+      Serial.println("Alarma: Exceso de movimiento");
+    }
+  }
+  
+  // Detectar ruidos fuertes (ajustar umbral según el sensor)
+  if (sonidoActual > 3000) {  // Umbral a ajustar según el sensor
+    contadorSonidos++;
+    totalDistracciones++;
+    
+    // Activar alarma por ruido
+    tone(BUZZER, 1800, 300);
+    Serial.println("Alarma: Ruido excesivo");
+  }
+  
+  // Incrementar contador de lecturas
+  totalLecturas++;
+}
+
+// Función para actualizar el tiempo restante
+void actualizarTiempoRestante() {
+  if (sesionActiva) {
+    unsigned long tiempoTranscurrido = millis() - tiempoInicio;
+    
+    // Si se ha superado el tiempo deseado, finalizar la sesión
+    if (tiempoTranscurrido >= tiempoDeseado) {
+      finalizarSesion();
+    } else {
+      tiempoRestante = tiempoDeseado - tiempoTranscurrido;
+    }
+  }
+}
+
+// Función para procesar variables en plantillas HTML
+String processor(const String& var) {
+  if (var == "NOMBRE") return nombreUsuario;
+  if (var == "MATERIA") return nombreMateria;
+  if (var == "TIEMPO_DESEADO") return String(tiempoDeseado / 60000); // En minutos
+  if (var == "TIEMPO_RESTANTE") return String(tiempoRestante / 1000); // En segundos
+  if (var == "FECHA_HORA") return fechaHoraActual;
+  if (var == "DISTRACCIONES") return String(totalDistracciones);
+  if (var == "DISTRACCIONES_MOVIMIENTO") return String(contadorMovimientos);
+  if (var == "DISTRACCIONES_SONIDO") return String(contadorSonidos);
+  if (var == "LUZ_PROMEDIO") return String(promedioLuz);
+  if (var == "TEMPERATURA_PROMEDIO") return String(promedioTemperatura);
+  if (var == "RUIDO_PROMEDIO") return String(promedioSonido);
+  
+  return String();
+}
+
+// Configuración inicial
+void setup() {
+  // Inicializar comunicación serial
+  Serial.begin(115200);
+  delay(1000);
+  Serial.println("Iniciando Sistema de Monitoreo de Concentración");
+  
+  // Configurar pines
+  pinMode(LED_VERDE, OUTPUT);
+  pinMode(LED_ROJO, OUTPUT);
+  pinMode(BUZZER, OUTPUT);
+  pinMode(SENSOR_MOVIMIENTO, INPUT);
+  pinMode(SENSOR_LUZ, INPUT);
+  pinMode(SENSOR_SONIDO, INPUT);
+  
+  // Inicializar sensor DHT
+  //dht.begin();
+  sensors.begin();
+  
+  // Inicializar LittleFS
+  inicializarLittleFS();
+  
+  // Conectar a WiFi
+  conectarWiFi();
+  
+  // Configurar servidor NTP
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  
+  // Configurar servidor web
+  configurarServidor();
+  
+  // Iniciar servidor web
+  server.begin();
+  Serial.println("Servidor web iniciado");
+  
+  // Estado inicial - LEDs apagados
+  digitalWrite(LED_VERDE, LOW);
+  digitalWrite(LED_ROJO, LOW);
+}
+
+// Bucle principal
+void loop() {
+  // Verificar si es tiempo de leer sensores
+  if (lecturaInterval.update()) {
+    if (sesionActiva) {
+      leerSensores();
+      actualizarTiempoRestante();
+    }
+  }
+}
