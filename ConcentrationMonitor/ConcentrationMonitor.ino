@@ -25,18 +25,18 @@
 #include <ArduinoJson.h>
 
 // Configuración de WiFi
-const char* ssid = "TU_SSID";
-const char* password = "TU_PASSWORD";
+const char* ssid = "INFINITUM5808";
+const char* password = "6UdKXRy3Jh";
 
 // Configuración de pines
 #define LED_VERDE 2
-#define LED_ROJO 4
-#define BUZZER 15
-#define SENSOR_MOVIMIENTO 12
-#define SENSOR_LUZ 34
-#define SENSOR_SONIDO 35
+#define LED_ROJO 26
+#define BUZZER 0
+#define SENSOR_MOVIMIENTO 27
+#define SENSOR_LUZ 38
+#define SENSOR_SONIDO 12
 //#define DHTPIN 14
-#define DS18B20_PIN 14
+#define DS18B20_PIN 0
 //#define DHTTYPE DHT11
 
 // Configuración del servidor NTP
