@@ -3,71 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sistema de Monitoreo de Concentración</title>
-  <link rel="stylesheet" type="text/css" href="styles.css">
+  <title>Sistema de Monitoreo</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="container">
     <h1>Sistema de Monitoreo de Concentración</h1>
-    <div class="fecha-hora">
-      <p id="fecha-actual"></p>
-    </div>
-    
-    <div class="card">
-      <h2>Iniciar sesión de estudio</h2>
-      <form action="/iniciar" method="POST">
-        <div class="form-group">
-          <label for="nombre">Nombre:</label>
-          <input type="text" id="nombre" name="nombre" required>
-        </div>
-        
-        <div class="form-group">
-          <label for="materia">Materia:</label>
-          <input type="text" id="materia" name="materia" required>
-        </div>
-        
-        <div class="form-group">
-          <label for="tiempo">Tiempo de concentración (minutos):</label>
-          <input type="number" id="tiempo" name="tiempo" min="1" max="180" value="25" required>
-        </div>
-        
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary">Iniciar sesión</button>
-        </div>
-      </form>
-    </div>
-    
-    <div class="info-box">
-      <h3>¿Cómo funciona?</h3>
-      <ul>
-        <li>Ingresa tu nombre, materia y tiempo de concentración</li>
-        <li>Al iniciar, se encenderá la luz verde indicando que la sesión está activa</li>
-        <li>El sistema monitoreará movimiento, sonido, luz y temperatura</li>
-        <li>Si te distraes (exceso de movimiento o ruido), sonará una alarma</li>
-        <li>Al finalizar, podrás ver un resumen de tu sesión</li>
-      </ul>
-    </div>
+    <form action="/iniciar" method="POST" class="card">
+      <label>Nombre:    <input name="nombre" required></label>
+      <label>Materia:   <input name="materia" required></label>
+      <label>Tiempo (min): <input name="tiempo" type="number" min="1" max="180" value="25" required></label>
+      <button type="submit">Iniciar</button>
+    </form>
   </div>
-
-  <script>
-    // Actualizar fecha y hora en tiempo real
-    function actualizarFechaHora() {
-      const ahora = new Date();
-      const opciones = { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      };
-      document.getElementById('fecha-actual').textContent = ahora.toLocaleDateString('es-ES', opciones);
-    }
-    
-    // Actualizar cada segundo
-    setInterval(actualizarFechaHora, 1000);
-    actualizarFechaHora();
-  </script>
 </body>
 </html>

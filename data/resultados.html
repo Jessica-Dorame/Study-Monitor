@@ -1,85 +1,29 @@
-<!-- Archivo: resultados.html -->
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Resultados de Sesión</title>
+  <title>Resultados</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="container">
-    <h1>Resultados de tu Sesión</h1>
+    <h1>Sesión finalizada</h1>
     <div class="card">
-      <div class="completion-badge">
-        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='64' height='64'%3E%3Ccircle cx='12' cy='12' r='10' fill='%234CAF50'/%3E%3Cpath d='M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z' fill='white'/%3E%3C/svg%3E" alt="Completado">
-        <h2>¡Sesión Completada!</h2>
-      </div>
-      <div class="session-summary">
-        <p><strong>Estudiante:</strong> %NOMBRE%</p>
-        <p><strong>Materia:</strong> %MATERIA%</p>
-        <p><strong>Fecha y hora:</strong> %FECHA_HORA%</p>
-        <p><strong>Duración configurada:</strong> %TIEMPO_DESEADO% minutos</p>
-      </div>
+      <p><strong>Estudiante:</strong> %NOMBRE%</p>
+      <p><strong>Materia:</strong>    %MATERIA%</p>
+      <p><strong>Fecha y hora:</strong> %FECHA_HORA%</p>
+      <p><strong>Tiempo deseado:</strong> %TIEMPO_DESEADO% min</p>
     </div>
-    <div class="card results-detail">
-      <h3>Estadísticas de la sesión</h3>
-      <div class="results-grid">
-        <div class="result-item">
-          <div class="result-icon">🔔</div>
-          <div class="result-value">%DISTRACCIONES%</div>
-          <div class="result-label">Total de distracciones</div>
-        </div>
-        <div class="result-item">
-          <div class="result-icon">🚶</div>
-          <div class="result-value">%DISTRACCIONES_MOVIMIENTO%</div>
-          <div class="result-label">Por movimiento</div>
-        </div>
-        <div class="result-item">
-          <div class="result-icon">🔊</div>
-          <div class="result-value">%DISTRACCIONES_SONIDO%</div>
-          <div class="result-label">Por sonido</div>
-        </div>
-        <div class="result-item">
-          <div class="result-icon">💡</div>
-          <div class="result-value">%LUZ_PROMEDIO%</div>
-          <div class="result-label">Nivel de luz promedio</div>
-        </div>
-        <div class="result-item">
-          <div class="result-icon">🌡️</div>
-          <div class="result-value">%TEMPERATURA_PROMEDIO%°C</div>
-          <div class="result-label">Temperatura promedio</div>
-        </div>
-        <div class="result-item">
-          <div class="result-icon">📊</div>
-          <div class="result-value">%RUIDO_PROMEDIO%</div>
-          <div class="result-label">Nivel de ruido promedio</div>
-        </div>
-      </div>
+    <div class="card">
+      <p>Total distracciones: %DISTRACCIONES%</p>
+      <p>Por movimiento:      %DISTRACCIONES_MOVIMIENTO%</p>
+      <p>Por sonido:          %DISTRACCIONES_SONIDO%</p>
+      <p>Luz promedio:        %LUZ_PROMEDIO%</p>
+      <p>Temp. promedio:      %TEMPERATURA_PROMEDIO%°C</p>
+      <p>Ruido promedio:      %RUIDO_PROMEDIO%</p>
     </div>
-    <div class="advice-box">
-      <h3>Consejos para mejorar</h3>
-      <div id="consejos"></div>
-    </div>
-    <div class="actions">
-      <a href="/" class="btn btn-primary">Nueva sesión</a>
-    </div>
+    <a href="/" class="btn">Nueva sesión</a>
   </div>
-  <script>
-    window.onload = function() {
-      const consejos = document.getElementById('consejos');
-      const d = parseInt('%DISTRACCIONES%');
-      let list = '<ul>';
-      if (d > 15) {
-        list += '<li>Muchas distracciones: prueba Pomodoro (25 minutos de estudio / 5 de descanso).</li>';
-      } else if (d > 5) {
-        list += '<li>Moderado nivel de distracciones: mantén tu enfoque.</li>';
-      } else {
-        list += '<li>Excelente concentración: ¡sigue así!</li>';
-      }
-      list += '</ul>';
-      consejos.innerHTML = list;
-    };
-  </script>
 </body>
 </html>
