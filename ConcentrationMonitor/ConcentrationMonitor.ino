@@ -36,7 +36,7 @@ const char* password = "2ERMhmD5t0";
 #define SENSOR_LUZ 36
 #define SENSOR_SONIDO 12
 //#define DHTPIN 14
-#define DS18B20_PIN 0
+#define DS18B20_PIN 4
 //#define DHTTYPE DHT11
 
 // Configuración del servidor NTP
