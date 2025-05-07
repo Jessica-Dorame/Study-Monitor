@@ -25,13 +25,13 @@
 #include <ArduinoJson.h>
 
 // Configuración de WiFi
-const char* ssid = "INFINITUM5808";
-const char* password = "6UdKXRy3Jh";
+const char* ssid = "INFINITUM0382_2.4";
+const char* password = "2ERMhmD5t0";
 
 // Configuración de pines
 #define LED_VERDE 2
 #define LED_ROJO 26
-#define BUZZER 0
+#define BUZZER 23
 #define SENSOR_MOVIMIENTO 27
 #define SENSOR_LUZ 38
 #define SENSOR_SONIDO 12
