@@ -97,8 +97,9 @@ void conectarWiFi() {
   Serial.println("");
   Serial.println("WiFi conectado!");
   Serial.print("Dirección IP: ");
-  Serial.println(WiFi.localIP());
+  Serial.println(WiFi.localIP());  // <- Aquí ya mostrabas la IP
 }
+
 
 // Función para inicializar LittleFS
 void inicializarLittleFS() {
@@ -275,51 +276,43 @@ void finalizarSesion() {
 void leerSensores() {
   // Leer temperatura
   sensors.requestTemperatures();
-  //float tempC = dht.readTemperature();
-    float tempC = sensors.getTempCByIndex(0);
-
+  float tempC = sensors.getTempCByIndex(0);
   if (!isnan(tempC)) {
     temperaturaActual = tempC;
     sumaTemperatura += tempC;
   }
-  
+  Serial.print("Temperatura actual (°C): ");
+  Serial.println(temperaturaActual);
+
   // Leer luz
   luzActual = analogRead(SENSOR_LUZ);
   sumaLuz += luzActual;
-  
+  Serial.print("Nivel de luz: ");
+  Serial.println(luzActual);
+
   // Leer sonido
   sonidoActual = analogRead(SENSOR_SONIDO);
   sumaSonido += sonidoActual;
-  
+  Serial.print("Nivel de sonido: ");
+  Serial.println(sonidoActual);
+
   // Leer movimiento
-  movimientoActual = digitalRead(SENSOR_MOVIMIENTO) == HIGH;
-  
-  // Incrementar contadores si hay distracción
+  movimientoActual = digitalRead(SENSOR_MOVIMIENTO);
   if (movimientoActual) {
     contadorMovimientos++;
     totalDistracciones++;
-    
-    // Si ha habido 10 movimientos, activar alarma
-    if (contadorMovimientos % 10 == 0) {
-      tone(BUZZER, 1500, 500);
-      Serial.println("Alarma: Exceso de movimiento");
-    }
+    Serial.println("¡Movimiento detectado!");
   }
-  
-  // Detectar ruidos fuertes (ajustar umbral según el sensor)
-  if (sonidoActual > 3000) {  // Umbral a ajustar según el sensor
+
+  // Contar sonido como distracción si supera un umbral
+  if (sonidoActual > 500) {  // Umbral de ejemplo
     contadorSonidos++;
     totalDistracciones++;
-    
-    // Activar alarma por ruido
-    tone(BUZZER, 1800, 300);
-    Serial.println("Alarma: Ruido excesivo");
+    Serial.println("¡Ruido fuerte detectado!");
   }
-  
-  // Incrementar contador de lecturas
+
   totalLecturas++;
 }
-
 // Función para actualizar el tiempo restante
 void actualizarTiempoRestante() {
   if (sesionActiva) {
