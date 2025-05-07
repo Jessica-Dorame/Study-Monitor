@@ -33,8 +33,8 @@ const char* password = "2ERMhmD5t0";
 #define LED_ROJO 26
 #define BUZZER 23
 #define SENSOR_MOVIMIENTO 27
-#define SENSOR_LUZ 38
-#define SENSOR_SONIDO 36
+#define SENSOR_LUZ 36
+#define SENSOR_SONIDO 12
 //#define DHTPIN 14
 #define DS18B20_PIN 0
 //#define DHTTYPE DHT11
