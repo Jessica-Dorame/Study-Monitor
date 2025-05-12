@@ -25,12 +25,17 @@
 #include <ArduinoJson.h>
 
 // Configuración de WiFi
+<<<<<<< HEAD
 //const char* ssid = "ioT_ITSON";
 //const char* password = "lv323-iot";
 // Configuración de WiFi
 
 const char* ssid = "INFINITUM5808";
 const char* password = "6UdKXRy3Jh";
+=======
+const char* ssid = "INFINITUM0382_2.4";
+const char* password = "2ERMhmD5t0";
+>>>>>>> ca5a8dd856f9a7260ee8af7f4c3b61a0b26eecf3
 
 // Configuración de pines
 #define LED_VERDE 2
@@ -39,9 +44,15 @@ const char* password = "6UdKXRy3Jh";
 #define SENSOR_MOVIMIENTO 27
 #define SENSOR_LUZ 36
 #define SENSOR_SONIDO 12
+<<<<<<< HEAD
 #define DHTPIN 15
 #define DS18B20_PIN 4
 #define DHTTYPE DHT11
+=======
+//#define DHTPIN 14
+#define DS18B20_PIN 4
+//#define DHTTYPE DHT11
+>>>>>>> ca5a8dd856f9a7260ee8af7f4c3b61a0b26eecf3
 
 // Configuración del servidor NTP
 const char* ntpServer = "pool.ntp.org";
