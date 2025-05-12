@@ -25,19 +25,23 @@
 #include <ArduinoJson.h>
 
 // Configuración de WiFi
+//const char* ssid = "ioT_ITSON";
+//const char* password = "lv323-iot";
+// Configuración de WiFi
+
 const char* ssid = "INFINITUM5808";
 const char* password = "6UdKXRy3Jh";
 
 // Configuración de pines
 #define LED_VERDE 2
 #define LED_ROJO 26
-#define BUZZER 0
+#define BUZZER 23
 #define SENSOR_MOVIMIENTO 27
-#define SENSOR_LUZ 38
+#define SENSOR_LUZ 36
 #define SENSOR_SONIDO 12
-//#define DHTPIN 14
-#define DS18B20_PIN 0
-//#define DHTTYPE DHT11
+#define DHTPIN 15
+#define DS18B20_PIN 4
+#define DHTTYPE DHT11
 
 // Configuración del servidor NTP
 const char* ntpServer = "pool.ntp.org";
@@ -47,7 +51,7 @@ const int daylightOffset_sec = 0;
 // Variables de tiempo
 const long INTERVALO_LECTURA = 1000; // Intervalo de lectura de sensores (1 segundo)
 
-// Instancia del sensor DHT
+// Instancia del sensor temperatura
 //DHT dht(DHTPIN, DHTTYPE);
 OneWire oneWire(DS18B20_PIN);
 DallasTemperature sensors(&oneWire);
@@ -97,8 +101,9 @@ void conectarWiFi() {
   Serial.println("");
   Serial.println("WiFi conectado!");
   Serial.print("Dirección IP: ");
-  Serial.println(WiFi.localIP());
+  Serial.println(WiFi.localIP());  // <- Aquí ya mostrabas la IP
 }
+
 
 // Función para inicializar LittleFS
 void inicializarLittleFS() {
@@ -139,6 +144,11 @@ void configurarServidor() {
       nombreMateria = request->getParam("materia", true)->value();
       tiempoDeseado = request->getParam("tiempo", true)->value().toInt() * 60 * 1000; // Convertir minutos a milisegundos
       
+      Serial.println("Iniciando sesión con los siguientes datos:");
+      Serial.println("Nombre: " + nombreUsuario);
+      Serial.println("Materia: " + nombreMateria);
+      Serial.println("Tiempo (ms): " + String(tiempoDeseado));
+      
       // Iniciar sesión
       iniciarSesion();
       
@@ -162,7 +172,18 @@ void configurarServidor() {
     AsyncResponseStream *response = request->beginResponseStream("application/json");
     DynamicJsonDocument doc(1024);
     
-    doc["tiempoRestante"] = tiempoRestante / 1000; // Convertir a segundos
+    // Asegurar que el tiempo restante se envía correctamente
+    if (sesionActiva) {
+      // Calcular el tiempo restante actualizado
+      unsigned long tiempoTranscurrido = millis() - tiempoInicio;
+      if (tiempoTranscurrido >= tiempoDeseado) {
+        tiempoRestante = 0;
+      } else {
+        tiempoRestante = tiempoDeseado - tiempoTranscurrido;
+      }
+    }
+    
+    doc["tiempoRestante"] = tiempoRestante; // Enviar en milisegundos
     doc["sesionActiva"] = sesionActiva;
     doc["temperatura"] = temperaturaActual;
     doc["luz"] = luzActual;
@@ -171,6 +192,21 @@ void configurarServidor() {
     doc["contadorMovimientos"] = contadorMovimientos;
     doc["contadorSonidos"] = contadorSonidos;
     doc["totalDistracciones"] = totalDistracciones;
+    
+    // Imprimir los datos que se están enviando para depuración
+    Serial.println("Enviando datos al cliente:");
+    Serial.print("Tiempo restante: ");
+    Serial.println(tiempoRestante);
+    Serial.print("Sesión activa: ");
+    Serial.println(sesionActiva ? "Sí" : "No");
+    Serial.print("Temperatura: ");
+    Serial.println(temperaturaActual);
+    Serial.print("Luz: ");
+    Serial.println(luzActual);
+    Serial.print("Sonido: ");
+    Serial.println(sonidoActual);
+    Serial.print("Movimiento: ");
+    Serial.println(movimientoActual ? "Sí" : "No");
     
     serializeJson(doc, *response);
     request->send(response);
@@ -205,6 +241,7 @@ void iniciarSesion() {
   
   // Marcar tiempo de inicio
   tiempoInicio = millis();
+  tiempoRestante = tiempoDeseado; // Inicializar tiempo restante
   
   // Mostrar en consola
   Serial.println("Sesión iniciada");
@@ -275,48 +312,43 @@ void finalizarSesion() {
 void leerSensores() {
   // Leer temperatura
   sensors.requestTemperatures();
-  //float tempC = dht.readTemperature();
-    float tempC = sensors.getTempCByIndex(0);
-
-  if (!isnan(tempC)) {
+  float tempC = sensors.getTempCByIndex(0);
+  if (tempC != DEVICE_DISCONNECTED_C) {  // Verificar que la lectura sea válida
     temperaturaActual = tempC;
     sumaTemperatura += tempC;
+    Serial.print("Temperatura actual (°C): ");
+    Serial.println(temperaturaActual);
+  } else {
+    Serial.println("Error al leer la temperatura");
   }
-  
+
   // Leer luz
   luzActual = analogRead(SENSOR_LUZ);
   sumaLuz += luzActual;
-  
+  Serial.print("Nivel de luz: ");
+  Serial.println(luzActual);
+
   // Leer sonido
   sonidoActual = analogRead(SENSOR_SONIDO);
   sumaSonido += sonidoActual;
-  
+  Serial.print("Nivel de sonido: ");
+  Serial.println(sonidoActual);
+
   // Leer movimiento
-  movimientoActual = digitalRead(SENSOR_MOVIMIENTO) == HIGH;
-  
-  // Incrementar contadores si hay distracción
+  movimientoActual = digitalRead(SENSOR_MOVIMIENTO);
   if (movimientoActual) {
     contadorMovimientos++;
     totalDistracciones++;
-    
-    // Si ha habido 10 movimientos, activar alarma
-    if (contadorMovimientos % 10 == 0) {
-      tone(BUZZER, 1500, 500);
-      Serial.println("Alarma: Exceso de movimiento");
-    }
+    Serial.println("¡Movimiento detectado!");
   }
-  
-  // Detectar ruidos fuertes (ajustar umbral según el sensor)
-  if (sonidoActual > 3000) {  // Umbral a ajustar según el sensor
+
+  // Contar sonido como distracción si supera un umbral
+  if (sonidoActual > 500) {  // Umbral de ejemplo
     contadorSonidos++;
     totalDistracciones++;
-    
-    // Activar alarma por ruido
-    tone(BUZZER, 1800, 300);
-    Serial.println("Alarma: Ruido excesivo");
+    Serial.println("¡Ruido fuerte detectado!");
   }
-  
-  // Incrementar contador de lecturas
+
   totalLecturas++;
 }
 
@@ -330,6 +362,8 @@ void actualizarTiempoRestante() {
       finalizarSesion();
     } else {
       tiempoRestante = tiempoDeseado - tiempoTranscurrido;
+      Serial.print("Tiempo restante (s): ");
+      Serial.println(tiempoRestante / 1000);
     }
   }
 }
@@ -366,8 +400,7 @@ void setup() {
   pinMode(SENSOR_LUZ, INPUT);
   pinMode(SENSOR_SONIDO, INPUT);
   
-  // Inicializar sensor DHT
-  //dht.begin();
+  // Inicializar sensor de temperatura
   sensors.begin();
   
   // Inicializar LittleFS
@@ -386,9 +419,9 @@ void setup() {
   server.begin();
   Serial.println("Servidor web iniciado");
   
-  // Estado inicial - LEDs apagados
+  // Estado inicial - LED rojo encendido, LED verde apagado
   digitalWrite(LED_VERDE, LOW);
-  digitalWrite(LED_ROJO, LOW);
+  digitalWrite(LED_ROJO, HIGH);  // Encendemos el LED rojo al inicio
 }
 
 // Bucle principal

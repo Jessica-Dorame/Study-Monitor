@@ -5,13 +5,13 @@ import mysql.connector
 from mysql.connector import errorcode
 
 # Configuración de serial (puerto y baudios)
-SERIAL_PORT = '/dev/ttyUSB0'
+SERIAL_PORT = '/dev/COM3'
 BAUD_RATE = 115200
 
 # Configuración de MySQL
 db_config = {
-    'user': 'tu_usuario',
-    'password': 'tu_contraseña',
+    'user': 'root',
+    'password': 'jorgendo43',
     'host': 'localhost',
     'database': 'concentracion',
     'raise_on_warnings': True
