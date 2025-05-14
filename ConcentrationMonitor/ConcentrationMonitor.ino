@@ -17,19 +17,11 @@
 #include "ESPAsyncWebServer.h"
 #include <LittleFS.h>
 #include "time.h"
-//#include <DHT.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
-
+#include "DHT.h"
 #include <NoDelay.h>
 #include <ArduinoJson.h>
 
 // Configuración de WiFi
-//const char* ssid = "ioT_ITSON";
-//const char* password = "lv323-iot";
-// Configuración de WiFi
-
-
 const char* ssid = "INFINITUM0382_2.4";
 const char* password = "2ERMhmD5t0";
 
@@ -40,40 +32,33 @@ const char* password = "2ERMhmD5t0";
 #define SENSOR_MOVIMIENTO 27
 #define SENSOR_LUZ 36
 #define SENSOR_SONIDO 12
-#define DHTPIN 15
-#define DS18B20_PIN 4
+#define DHTPIN 4
 #define DHTTYPE DHT11
-//#define DHTPIN 14
-#define DS18B20_PIN 4
-//#define DHTTYPE DHT11
 
-// Configuración del servidor NTP
+typedef long timezone_t;
 const char* ntpServer = "pool.ntp.org";
-const long gmtOffset_sec = -21600; // -6 horas (ajustar según zona horaria)
+const long gmtOffset_sec = -21600;
 const int daylightOffset_sec = 0;
 
 // Variables de tiempo
-const long INTERVALO_LECTURA = 1000; // Intervalo de lectura de sensores (1 segundo)
+const long INTERVALO_LECTURA = 1000;
 
-// Instancia del sensor temperatura
-//DHT dht(DHTPIN, DHTTYPE);
-OneWire oneWire(DS18B20_PIN);
-DallasTemperature sensors(&oneWire);
+// Instancia del sensor de temperatura DHT
+DHT dht(DHTPIN, DHTTYPE);
 
 // Instancia del servidor web en puerto 80
 AsyncWebServer server(80);
 
 // Instancia para manejo de intervalos de tiempo
 noDelay lecturaInterval(INTERVALO_LECTURA);
-
 // Variables para almacenar datos
 struct tm timeinfo;
 String fechaHoraActual;
 String nombreUsuario = "";
 String nombreMateria = "";
-unsigned long tiempoDeseado = 0; // en milisegundos
+unsigned long tiempoDeseado = 0;
 unsigned long tiempoInicio = 0;
-unsigned long tiempoRestante = 0;
+unsigned long tiempoRestante = 0;  // Corregido - eliminado \( extra
 bool sesionActiva = false;
 int contadorMovimientos = 0;
 int contadorSonidos = 0;
@@ -86,7 +71,7 @@ int sumaLuz = 0;
 int sumaSonido = 0;
 float sumaTemperatura = 0;
 
-// Variables para almacenar datos en tiempo real
+// Variables para datos en tiempo real
 float temperaturaActual = 0;
 int luzActual = 0;
 int sonidoActual = 0;
@@ -314,31 +299,26 @@ void finalizarSesion() {
 
 // Función para leer sensores
 void leerSensores() {
-  // Leer temperatura
-  sensors.requestTemperatures();
-  float tempC = sensors.getTempCByIndex(0);
-  if (tempC != DEVICE_DISCONNECTED_C) {  // Verificar que la lectura sea válida
-    temperaturaActual = tempC;
-    sumaTemperatura += tempC;
+  // Leer temperatura con DHT11
+  float temp = dht.readTemperature();
+  if (!isnan(temp)) {
+    temperaturaActual = temp;
+    sumaTemperatura += temp;
     Serial.print("Temperatura actual (°C): ");
     Serial.println(temperaturaActual);
   } else {
-    Serial.println("Error al leer la temperatura");
+    Serial.println("Error al leer el sensor DHT11");
   }
 
-  // Leer luz
+  // Lecturas de luz, sonido, movimiento
   luzActual = analogRead(SENSOR_LUZ);
   sumaLuz += luzActual;
-  Serial.print("Nivel de luz: ");
-  Serial.println(luzActual);
+  Serial.print("Nivel de luz: "); Serial.println(luzActual);
 
-  // Leer sonido
   sonidoActual = analogRead(SENSOR_SONIDO);
   sumaSonido += sonidoActual;
-  Serial.print("Nivel de sonido: ");
-  Serial.println(sonidoActual);
+  Serial.print("Nivel de sonido: "); Serial.println(sonidoActual);
 
-  // Leer movimiento
   movimientoActual = digitalRead(SENSOR_MOVIMIENTO);
   if (movimientoActual) {
     contadorMovimientos++;
@@ -346,8 +326,7 @@ void leerSensores() {
     Serial.println("¡Movimiento detectado!");
   }
 
-  // Contar sonido como distracción si supera un umbral
-  if (sonidoActual > 500) {  // Umbral de ejemplo
+  if (sonidoActual > 500) {
     contadorSonidos++;
     totalDistracciones++;
     Serial.println("¡Ruido fuerte detectado!");
@@ -355,6 +334,7 @@ void leerSensores() {
 
   totalLecturas++;
 }
+
 
 // Función para actualizar el tiempo restante
 void actualizarTiempoRestante() {
@@ -376,8 +356,8 @@ void actualizarTiempoRestante() {
 String processor(const String& var) {
   if (var == "NOMBRE") return nombreUsuario;
   if (var == "MATERIA") return nombreMateria;
-  if (var == "TIEMPO_DESEADO") return String(tiempoDeseado / 60000); // En minutos
-  if (var == "TIEMPO_RESTANTE") return String(tiempoRestante / 1000); // En segundos
+  if (var == "TIEMPO_DESEADO") return String(tiempoDeseado / 60000);
+  if (var == "TIEMPO_RESTANTE") return String(tiempoRestante / 1000);
   if (var == "FECHA_HORA") return fechaHoraActual;
   if (var == "DISTRACCIONES") return String(totalDistracciones);
   if (var == "DISTRACCIONES_MOVIMIENTO") return String(contadorMovimientos);
@@ -385,52 +365,35 @@ String processor(const String& var) {
   if (var == "LUZ_PROMEDIO") return String(promedioLuz);
   if (var == "TEMPERATURA_PROMEDIO") return String(promedioTemperatura);
   if (var == "RUIDO_PROMEDIO") return String(promedioSonido);
-  
   return String();
 }
 
 // Configuración inicial
 void setup() {
-  // Inicializar comunicación serial
   Serial.begin(115200);
   delay(1000);
   Serial.println("Iniciando Sistema de Monitoreo de Concentración");
-  
-  // Configurar pines
+
   pinMode(LED_VERDE, OUTPUT);
   pinMode(LED_ROJO, OUTPUT);
-  pinMode(BUZZER, OUTPUT);
+  pinMode(BUZZER, OUTPUT);  // Corregido - eliminado **InterruptedException**
   pinMode(SENSOR_MOVIMIENTO, INPUT);
   pinMode(SENSOR_LUZ, INPUT);
   pinMode(SENSOR_SONIDO, INPUT);
-  
-  // Inicializar sensor de temperatura
-  sensors.begin();
-  
-  // Inicializar LittleFS
+
+  dht.begin();  // Inicializar DHT11
   inicializarLittleFS();
-  
-  // Conectar a WiFi
   conectarWiFi();
-  
-  // Configurar servidor NTP
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-  
-  // Configurar servidor web
   configurarServidor();
-  
-  // Iniciar servidor web
   server.begin();
-  Serial.println("Servidor web iniciado");
-  
-  // Estado inicial - LED rojo encendido, LED verde apagado
+
   digitalWrite(LED_VERDE, LOW);
-  digitalWrite(LED_ROJO, HIGH);  // Encendemos el LED rojo al inicio
+  digitalWrite(LED_ROJO, HIGH);
 }
 
 // Bucle principal
 void loop() {
-  // Verificar si es tiempo de leer sensores
   if (lecturaInterval.update()) {
     if (sesionActiva) {
       leerSensores();
